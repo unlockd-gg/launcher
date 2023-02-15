@@ -1,6 +1,13 @@
 [![Build Status](https://www.travis-ci.com/TheZoc/ZPatcher.svg?branch=master)](https://www.travis-ci.com/TheZoc/ZPatcher)
 [![Build status](https://ci.appveyor.com/api/projects/status/i6kr70f4x40bero5/branch/master?svg=true)](https://ci.appveyor.com/project/TheZoc/zpatcher/branch/master)
 
+unlockd.gg launcher
+================
+
+See the uetopia_launcher branch for the previous version of this launcher.  
+
+Tasks:  Tie in with the new backend and new authentication schema when available.
+
 🩹 ZPatcher Lib
 ================
 

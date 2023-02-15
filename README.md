@@ -1,6 +1,15 @@
 [![Build Status](https://www.travis-ci.com/TheZoc/ZPatcher.svg?branch=master)](https://www.travis-ci.com/TheZoc/ZPatcher)
 [![Build status](https://ci.appveyor.com/api/projects/status/i6kr70f4x40bero5/branch/master?svg=true)](https://ci.appveyor.com/project/TheZoc/zpatcher/branch/master)
 
+UETOPIA Launcher
+================
+
+This branch contains the modifications to support authentication and multiple games on uetopia.com
+
+You can see a live demo on the FORMUP game:  https://uetopia.com/#/game/5764417417379840 (download game)
+
+This launcher is a very early minimum viable product, and is mostly a proof of concept.  It needs a lot of UI help at the very least.
+
 🩹 ZPatcher Lib
 ================
 

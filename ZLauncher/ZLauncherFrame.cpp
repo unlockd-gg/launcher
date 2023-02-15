@@ -17,6 +17,8 @@
 #include "ZLauncher.h"
 #include "ZLauncherFrame.h"
 #include "ZLauncherThread.h"
+#include "ZLauncherPatcherThread.h"
+#include "ZLauncherTokenThread.h"
 #include "DownloadFileWriter.h"
 
 //////////////////////////////////////////////////////////////////////////
@@ -27,6 +29,9 @@ wxString g_PatchHTMLHeaderFileName = PATCH_HEADER_HTML_FILE;
 // This will hold the HTML header data for the patch notes window. Please note, it must include an open <body> tag as the last tag!
 static wxString PatchHTMLHeader = "";
 
+// Init static string 
+std::string ZLauncherFrame::CurrentAccessToken = "";
+
 ///////////////////////////////////////////////////////////////////////////
 
 ZLauncherFrame::ZLauncherFrame(ZLauncherConfig& config, wxWindow* parent, wxWindowID id, const wxString& title, const wxPoint& pos, const wxSize& size, long style)
@@ -35,7 +40,7 @@ ZLauncherFrame::ZLauncherFrame(ZLauncherConfig& config, wxWindow* parent, wxWind
 {
 	wxImage::SetDefaultLoadFlags(wxImage::GetDefaultLoadFlags() & ~wxImage::Load_Verbose);
 
-	this->SetSizeHints( wxSize( 500,300 ), wxDefaultSize );
+	this->SetSizeHints( wxSize( 900,300 ), wxDefaultSize );
 	this->SetBackgroundColour( m_Config.ApplicationBackground );
 	
 	// GridBagSizer for the whole frame
@@ -43,18 +48,44 @@ ZLauncherFrame::ZLauncherFrame(ZLauncherConfig& config, wxWindow* parent, wxWind
 	gridBagSizerFrame = new wxGridBagSizer( 0, 0 );
 	gridBagSizerFrame->SetFlexibleDirection( wxBOTH );
 	gridBagSizerFrame->SetNonFlexibleGrowMode( wxFLEX_GROWMODE_SPECIFIED );
-	gridBagSizerFrame->SetMinSize( wxSize( 800,600 ) ); 
+	gridBagSizerFrame->SetMinSize( wxSize( 1200,600 ) ); 
+
+	// GridBagSizer For the "Game List"  
+	wxGridBagSizer* gridBagSizerGameList;
+	gridBagSizerGameList = new wxGridBagSizer(0, 0);
+	gridBagSizerGameList->SetFlexibleDirection(wxBOTH);
+	gridBagSizerGameList->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
+
+	// Game List
+	m_gameListChooser = new wxListBox(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, 0, nullptr, wxLB_SINGLE | wxLB_ALWAYS_SB );
+	m_gameListChooser->SetMinSize(wxSize(400, 500));
+
+	// m_gameListChooser->Connect(wxEVT_LEFT_DOWN, wxMouseEventHandler(ZLauncherFrame::OnGameSelectedClicked), NULL, this);
+	m_gameListChooser->Connect(wxEVT_COMMAND_LISTBOX_SELECTED, wxCommandEventHandler(ZLauncherFrame::OnGameSelected), NULL, this);
+
+	gridBagSizerGameList->Add(m_gameListChooser, wxGBPosition(0, 0), wxGBSpan(1, 1), wxEXPAND, 5);
+
+	// Text for the Get New Games hint
+	m_txtGetGameHint = new wxTextCtrl(this, wxID_ANY, "Game not showing up?  Go to uetopia.com and find the game.  Click play/settings -> Save.  Then relaunch this launcher. ", wxDefaultPosition, wxDefaultSize, wxTE_READONLY | wxNO_BORDER | wxTE_MULTILINE);
+	m_txtGetGameHint->SetForegroundColour(m_Config.ProgressBarTextForeground);
+	m_txtGetGameHint->SetBackgroundColour(m_Config.ProgressBarTextBackground);
+	m_txtGetGameHint->SetMinSize(wxSize(400, 35));
+
+	gridBagSizerGameList->Add(m_txtGetGameHint, wxGBPosition(1, 0), wxGBSpan(1, 1), wxALIGN_BOTTOM | wxEXPAND, 5);
+	
 
 	// GridBagSizer For the "Body"  (HTML Window, etc.)
 	wxGridBagSizer* gridBagSizerBody;
 	gridBagSizerBody = new wxGridBagSizer( 0, 0 );
 	gridBagSizerBody->SetFlexibleDirection( wxBOTH );
 	gridBagSizerBody->SetNonFlexibleGrowMode( wxFLEX_GROWMODE_SPECIFIED );
+
+	gridBagSizerBody->Add(gridBagSizerGameList, wxGBPosition(0, 0), wxGBSpan(1, 1), wxEXPAND, 5);
 	
 	// HTML Viewer
 	m_htmlWin = wxWebView::New(this, wxID_ANY, wxWebViewDefaultURLStr, wxDefaultPosition, wxDefaultSize, wxWebViewBackendDefault, wxSIMPLE_BORDER);
 	m_htmlWin->SetMinSize( wxSize( 400,300 ) );
-	gridBagSizerBody->Add( m_htmlWin, wxGBPosition( 0, 0 ), wxGBSpan( 1, 1 ), wxALL|wxEXPAND, 5 );
+	gridBagSizerBody->Add( m_htmlWin, wxGBPosition( 0, 1 ), wxGBSpan( 1, 1 ), wxALL|wxEXPAND, 5 );
 
 	// GridBagSizer for the right side of the window
 	wxGridBagSizer* gridBagSizerRight;
@@ -84,11 +115,14 @@ ZLauncherFrame::ZLauncherFrame(ZLauncherConfig& config, wxWindow* parent, wxWind
 	gridBagSizerRight->AddGrowableCol( 0 );
 	gridBagSizerRight->AddGrowableRow( 0 );
 
-	gridBagSizerBody->Add( gridBagSizerRight, wxGBPosition( 0, 1 ), wxGBSpan( 1, 1 ), wxALIGN_RIGHT|wxEXPAND, 5 );
-	gridBagSizerBody->AddGrowableCol( 1 );
+	gridBagSizerBody->Add( gridBagSizerRight, wxGBPosition( 0, 2 ), wxGBSpan( 1, 1 ), wxALIGN_RIGHT|wxEXPAND, 5 );
+	gridBagSizerBody->AddGrowableCol( 2 );
 	gridBagSizerBody->AddGrowableRow( 0 );
 	
 	gridBagSizerFrame->Add( gridBagSizerBody, wxGBPosition( 0, 0 ), wxGBSpan( 1, 2 ), wxEXPAND, 5 );
+
+	//gridBagSizerFrame->Add(gridBagSizerGameList, wxGBPosition(0, 0), wxGBSpan(1, 3), wxEXPAND, 5);
+
 	
 	// Footer Area (Progress Bar and Launch button)
 	wxGridBagSizer* gridBagSizerFooter;
@@ -146,6 +180,9 @@ ZLauncherFrame::ZLauncherFrame(ZLauncherConfig& config, wxWindow* parent, wxWind
 	// Bind Message Events
 	Bind(wxEVT_PAINT, &ZLauncherFrame::PaintEvent, this);
 
+	Bind(wxEVT_COMMAND_UPDATE_GAME_LIST, &ZLauncherFrame::OnPatchableGamesUpdate, this);
+	//Bind(wxEVT_COMMAND_CLICKED_GAME_LIST, &ZLauncherFrame::OnGameSelectedClicked, this);
+
 	Bind(wxEVT_COMMAND_UPDATE_PROGRESS_BAR, &ZLauncherFrame::OnProgressBarUpdate, this);
 	Bind(wxEVT_COMMAND_UPDATE_PROGRESS_TEXT, &ZLauncherFrame::OnProgressTextUpdate, this);
 
@@ -162,6 +199,9 @@ ZLauncherFrame::ZLauncherFrame(ZLauncherConfig& config, wxWindow* parent, wxWind
 	m_btnClose->Bind(wxEVT_BUTTON, &ZLauncherFrame::OnCloseButtonClicked, this);
 	m_btnLaunch->Bind(wxEVT_BUTTON, &ZLauncherFrame::OnLaunchButtonClicked, this);
 
+	// Bind GameList Clicks
+	//m_gameListChooser->Bind(wxEVT_CHOICE, &ZLauncherFrame::OnGameSelectedClicked, this);
+
 	// Read Header html data from external file
 	if (wxFile::Exists(GetResourcesDirectory() + g_PatchHTMLHeaderFileName))
 	{
@@ -174,7 +214,18 @@ ZLauncherFrame::ZLauncherFrame(ZLauncherConfig& config, wxWindow* parent, wxWind
 	}
 
 	// Set executable name
-	m_LaunchExecutableName = m_Config.LaunchExecutable;
+	// For this, we want to set up a base level directory, then each game will get it's own specific location (because we need to know the path and filename)
+	m_LaunchExecutableBasePath = m_Config.LaunchExecutable;
+	m_LaunchExecutableName = m_Config.LaunchExecutable; // this gets overwritten on game select with the actual path.
+
+	// clear access token
+	// can't do this here!
+	//CurrentAccessToken = "";
+	ZLauncherFrame::CurrentAccessToken = "";
+
+	PatchableGames.clear();
+
+
 }
 
 ZLauncherFrame::~ZLauncherFrame()
@@ -186,22 +237,72 @@ void ZLauncherFrame::OnCloseButtonClicked(wxCommandEvent& WXUNUSED(evt))
 	wxQueueEvent(wxTheApp->GetTopWindow()->GetEventHandler(), new wxCloseEvent(wxEVT_CLOSE_WINDOW));
 }
 
+void ZLauncherFrame::OnGameSelectedClicked(wxMouseEvent& event)
+{
+	// Something was clicked
+	// 	   // Check to see if it was a game or just empty space
+	wxListBox* m_lbox = dynamic_cast<wxListBox*>(event.GetEventObject());
+	int item = m_lbox->HitTest(event.GetPosition());
+
+	if (item != wxNOT_FOUND)
+	{
+		//wxLogMessage(_T("Listbox item %d right clicked"), item); // Yields the index.
+		// 
+		//A game has been selected from the list
+		// Grab the xml which we already have
+		//if (PatchableGames[item]->patcher_details_xml.size() > 10)
+		//{
+			
+		//wxLogMessage(_T("Listbox item %s clicked"), PatchableGames[item]->Title); // this is wrong
+
+		//wxLogMessage(_T("Listbox item %d clicked"), m_lbox->GetSelection()); // always -1
+
+			//Save the version file name into the config
+			m_Config.VersionFile = PatchableGames[item]->key_id + ".zversion";
+
+			// then, Begin patcher thread
+			DoStartCreatePatchThread();
+		//}
+	}
+	else
+	{
+		//wxLogMessage(_T("Listbox clicked but no item clicked upon"));
+	}
+}
+
+void ZLauncherFrame::OnGameSelected(wxCommandEvent& event)
+{
+	// a game was selected.
+	int item = event.GetSelection();
+	//wxLogMessage(_T("Listbox item selected: " + std::to_string(item) ) );
+
+	if (item != wxNOT_FOUND)
+	{
+		//Save the version file name into the config
+		m_Config.VersionFile = PatchableGames[item]->key_id + ".zversion";
+		m_Config.UpdateURL = "https://apitest-dot-ue4topia.appspot.com/gamepatch/" + PatchableGames[item]->key_id + "/manifest.xml";
+
+		// Also set the folder directory to use
+		m_Config.TargetDirectory = "./" + PatchableGames[item]->Title + "/";
+
+		//patcher_details_xml = PatchableGames[item]->patcher_details_xml; // this works, but for some reason rapidml wants this as a file, so I'm just going to put it back the way it was.
+
+		// then, Begin patcher thread
+		DoStartCreatePatchThread();
+	}
+}
+
 void ZLauncherFrame::OnLaunchButtonClicked(wxCommandEvent& WXUNUSED(evt))
 {
 	// System specific
 #ifdef _WIN32
+	// wxLogMessage(m_LaunchExecutableName);
+	OutputDebugStringW(m_LaunchExecutableName);
 	ShellExecuteA(NULL, "open", m_LaunchExecutableName.mbc_str(), NULL, NULL, SW_SHOW);
-#elif (__APPLE__ || __linux__)
-	pid_t process = fork();
-	if (process == 0)
-	{
-		std::string exec_path = "./" + m_LaunchExecutableName.ToStdString();
-		execv(exec_path.c_str(), NULL);
-	}
 #endif
 
 	// Exit after launching the game/application
-	wxQueueEvent(wxTheApp->GetTopWindow()->GetEventHandler(), new wxCloseEvent(wxEVT_CLOSE_WINDOW));
+	//wxQueueEvent(wxTheApp->GetTopWindow()->GetEventHandler(), new wxCloseEvent(wxEVT_CLOSE_WINDOW));
 }
 
 void ZLauncherFrame::OnClickLink(wxWebViewEvent& evt)
@@ -235,7 +336,7 @@ void ZLauncherFrame::RenderFrame(wxDC& dc)
 	}
 }
 
-void ZLauncherFrame::DoStartCreatePatchThread()
+void ZLauncherFrame::DoStartCreateAuthThread()
 {
 	m_pThread = new ZLauncherThread(this, m_Config.UpdateURL, m_Config.VersionFile, m_Config.TargetDirectory);
 
@@ -246,6 +347,47 @@ void ZLauncherFrame::DoStartCreatePatchThread()
 		delete m_pThread;
 		m_pThread = NULL;
 	}
+}
+
+void ZLauncherFrame::DoStartCreatePatchThread()
+{
+	m_pPThread = new ZLauncherPatcherThread(this, m_Config.UpdateURL, m_Config.VersionFile, m_Config.TargetDirectory);
+
+	if (m_pPThread->Run() != wxTHREAD_NO_ERROR)
+	{
+		// TODO: Handle this appropriately!
+		wxLogError("Can't create the thread!");
+		delete m_pPThread;
+		m_pPThread = NULL;
+	}
+}
+
+void ZLauncherFrame::DoStartCreateTokenThread()
+{
+	m_pTThread = new ZLauncherTokenThread(this, m_Config.UpdateURL, m_Config.VersionFile, m_Config.TargetDirectory);
+
+	if (m_pTThread->Run() != wxTHREAD_NO_ERROR)
+	{
+		// TODO: Handle this appropriately!
+		wxLogError("Can't create the thread!");
+		delete m_pTThread;
+		m_pTThread = NULL;
+	}
+}
+
+
+
+void ZLauncherFrame::OnPatchableGamesUpdate(wxThreadEvent& evt)
+{
+	//m_txtProgress->SetValue(evt.GetString());
+
+	// deal with the m_gameListChooser
+	//for (auto it = evt.GetPayload<wxString>().begin; it != end(evt.GetPayload<wxVector>() ); ++it) {
+		m_gameListChooser->Append(evt.GetString()  );
+		//m_gameListChooser->Append(wxT("test"));
+
+		//it->doSomething();
+	
 }
 
 void ZLauncherFrame::OnProgressBarUpdate(wxThreadEvent& evt)
@@ -407,5 +549,31 @@ void ZLauncherFrame::EnableLaunchButton(bool enable)
 	wxThreadEvent* ButtonLaunchEnableEvent = new wxThreadEvent(wxEVT_COMMAND_ENABLE_LAUNCH_BUTTON);
 	ButtonLaunchEnableEvent->SetInt(static_cast<int>(enable));
 	wxQueueEvent(wxTheApp->GetTopWindow()->GetEventHandler(), ButtonLaunchEnableEvent);
+}
+
+void ZLauncherFrame::UpdateAccessToken(std::string IncomingAccessToken)
+{
+	CurrentAccessToken = IncomingAccessToken;
+}
+
+void ZLauncherFrame::UpdateTitle(std::string IncomingAccessToken)
+{
+	this->SetTitle("UETOPIA_AUTH:" + IncomingAccessToken);
+}
+
+void ZLauncherFrame::UpdatePatchableGames(std::vector < ZLauncherPatchableGame*> incoming_patchable_games)
+{
+	PatchableGames = incoming_patchable_games;
+
+	// Do something here to update the UI
+
+	for (int i = 0; i < incoming_patchable_games.size(); i++) {
+		//incoming_patchable_games[i].doSomething();
+
+		wxThreadEvent* updateGameListEvent = new wxThreadEvent(wxEVT_COMMAND_UPDATE_GAME_LIST);
+		updateGameListEvent->SetString(incoming_patchable_games[i]->Title);
+		wxQueueEvent(wxTheApp->GetTopWindow()->GetEventHandler(), updateGameListEvent);
+	}
+
 }
 

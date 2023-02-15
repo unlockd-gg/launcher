@@ -22,6 +22,7 @@
 #endif
 
 #include "ZLauncherThread.h"
+#include "ZLauncherPatcherThread.h"
 
 // Zoc (2016-04-17): It is mandatory to call curl_global_init() before using DownloadFileWriter!
 class DownloadFileWriter
@@ -34,7 +35,7 @@ public:
 
 protected:
 	DownloadFileWriter*		m_pSelf;
-	ZLauncherThread*		m_pThread;
+	ZLauncherPatcherThread*		m_pThread;
 	CURL*					m_CurlHandle;
 	double					m_LastUpdateTime;		// Optionally used to limit the transfer info functin update frequency.
 	char					m_CurlErrorMessage[CURL_ERROR_SIZE];
@@ -47,7 +48,7 @@ protected:
 
 
 public:
-	DownloadFileWriter(ZLauncherThread* ownerThread = nullptr);
+	DownloadFileWriter(ZLauncherPatcherThread* ownerThread = nullptr);
 
 	int						PrepareFileToWrite(const std::string& DestFile);
 	int						PrepareCurlHandle();
@@ -61,7 +62,7 @@ public:
 	std::string				GetDestFileName();
 	double					GetLastUpdateTime();
 	void					SetLastUpdateTime(const double& lastUpdate);
-	ZLauncherThread*		GetParentThread();
+	ZLauncherPatcherThread*		GetParentThread();
 
 	static size_t			Callback_WriteFile(void* Buffer, size_t ElementSize, size_t NumElements, void* DownloadFileWriterPointer);
 	static int				TransferInfo(void *p, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow);

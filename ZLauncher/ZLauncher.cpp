@@ -75,7 +75,7 @@ bool ZLancher::OnInit()
 #endif
 
 	f->Show(true);
-	f->DoStartCreatePatchThread();
+	f->DoStartCreateAuthThread();
 
 	return true;
 }

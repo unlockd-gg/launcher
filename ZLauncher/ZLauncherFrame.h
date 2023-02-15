@@ -27,6 +27,7 @@
 #include <wx/button.h>
 #include <wx/frame.h>
 #include "curl/curl.h"
+#include <vector>
 
 class ZLauncherThread;
 struct ZLauncherConfig;
@@ -55,12 +56,31 @@ struct ZLauncherConfig;
 // Header related files
 extern wxString g_PatchHTMLHeaderFileName;
 
+struct ZLauncherPatchableGame
+{
+	std::string Title;
+	std::string Description;
+	std::string banner_url;
+	std::string icon_url;
+	//std::string patcher_details_xml;
+	std::string key_id;
+};
+
+// All of the patchable games
+		// ZLauncherPatchableGame patchable_games[100];
+static std::vector < ZLauncherPatchableGame*> PatchableGames;
+
 ///////////////////////////////////////////////////////////////////////////////
 /// Class ZLauncherFrame
 ///////////////////////////////////////////////////////////////////////////////
 class ZLauncherFrame : public wxFrame
 {
 	private:
+
+		static std::string CurrentAccessToken;
+
+		// Keep the currently selected game's ML patch file on hand and outside of the array
+		std::string patcher_details_xml;
 	
 	protected:
 		wxBitmap m_backgroundImg;
@@ -69,6 +89,9 @@ class ZLauncherFrame : public wxFrame
 		wxTextCtrl* m_txtProgress;
 		wxGauge* m_progress;
 		wxButton* m_btnLaunch;
+
+		wxListBox* m_gameListChooser;
+		wxTextCtrl* m_txtGetGameHint;
 	
 		wxBitmap m_LaunchButtonImg_Normal;
 		wxBitmap m_LaunchButtonImg_Disabled;
@@ -84,17 +107,31 @@ class ZLauncherFrame : public wxFrame
 
 		ZLauncherConfig& m_Config;
 
+		
+
 	public:
-		ZLauncherFrame(ZLauncherConfig& config, wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = wxT("ZLauncher : ZPatcher v3.0"), const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxSize( 800,600 ), long style = 0L /* wxCAPTION|wxCLOSE_BOX|wxSYSTEM_MENU */ );
+		ZLauncherFrame(ZLauncherConfig& config, wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = wxT("ZLauncher : ZPatcher v3.0"), const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxSize( 1200,600 ), long style = 0L /* wxCAPTION|wxCLOSE_BOX|wxSYSTEM_MENU */ );
 		~ZLauncherFrame();
 	
 protected:
+
+	// We need to keep track of the base path for installations, and the specific launch path for each game.
+	wxString m_LaunchExecutableBasePath;
 	wxString m_LaunchExecutableName;
 
 public:
 	//////////////////////////////////////////////////////////////////////////
 	// This is the directory that will hold all the assets related to the patcher
 	static const wxString GetResourcesDirectory() { return wxString(RESOURCES_DIRECTORY); }
+
+	//////////////////////////////////////////////////////////////////////////
+	// Close button click
+	// this does not seem to be able to return the selected item...  it's a click.
+	void OnGameSelectedClicked(wxMouseEvent& event);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Game Selected
+	void OnGameSelected(wxCommandEvent& event);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Set Launch Executable Name
@@ -119,7 +156,11 @@ public:
 
 	//////////////////////////////////////////////////////////////////////////
 	// Thread communication
+	void DoStartCreateAuthThread();
 	void DoStartCreatePatchThread();
+	void DoStartCreateTokenThread();
+
+	void OnPatchableGamesUpdate(wxThreadEvent& evt);
 
 	void OnProgressBarUpdate(wxThreadEvent& evt);
 	void OnProgressTextUpdate(wxThreadEvent& evt);
@@ -139,10 +180,25 @@ public:
 	static void HTMLLoadPage(wxString url);
 	static void EnableLaunchButton(bool enable);
 
+	// Thread communication for token
+	static void UpdateAccessToken(std::string IncomingAccessToken);
+
+	void UpdateTitle(std::string IncomingAccessToken);
+
+	// Thread communication for patachable games
+	static void UpdatePatchableGames(std::vector < ZLauncherPatchableGame*> incoming_patchable_games);
+	
+
 protected:
 	friend class			ZLauncherThread;			// Allow it to access our m_pThread
-	ZLauncherThread*		m_pThread;					// Our thread pointer
+	friend class			ZLauncherPatcherThread;			// Allow it to access our m_pThread
+	friend class			ZLauncherTokenThread;			// Allow it to access our m_pThread
+	ZLauncherThread*		m_pThread;					// Our thread pointer to the auth thread
+	ZLauncherPatcherThread*		m_pPThread;					// Our thread pointer to the auth thread
+	ZLauncherTokenThread* m_pTThread;					// Our thread pointer to the token thread
 	wxCriticalSection		m_pThreadCS;				// protects the m_pThread pointer
+
+	
 
 };
 

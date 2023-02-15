@@ -16,7 +16,7 @@
 #include "DownloadFileWriter.h"
 #include "LogSystem.h"
 
-DownloadFileWriter::DownloadFileWriter(ZLauncherThread* ownerThread)
+DownloadFileWriter::DownloadFileWriter(ZLauncherPatcherThread* ownerThread)
 {
 	m_pSelf								= this;
 	m_pThread							= ownerThread;
@@ -124,7 +124,7 @@ void DownloadFileWriter::SetLastUpdateTime(const double& lastUpdate)
 	m_LastUpdateTime = lastUpdate;
 }
 
-ZLauncherThread* DownloadFileWriter::GetParentThread()
+ZLauncherPatcherThread* DownloadFileWriter::GetParentThread()
 {
 	return m_pThread;
 }
